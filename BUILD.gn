@@ -135,6 +135,6 @@ ohos_shared_library("ejdb") {
     "//third_party/iowow:iowow",
   ]
 
-  part_name = "hiview"
-  subsystem_name = "hiviewdfx"
+  part_name = "ejdb"
+  subsystem_name = "thirdparty"
 }
