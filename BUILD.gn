@@ -38,7 +38,6 @@ action("copy_iowow_header") {
     "$target_gen_dir/ejdb2/iowow/iwstree.h",
     "$target_gen_dir/ejdb2/iowow/iwstw.h",
     "$target_gen_dir/ejdb2/iowow/iwth.h",
-    "$target_gen_dir/ejdb2/iowow/iwtp.h",
     "$target_gen_dir/ejdb2/iowow/iwutils.h",
     "$target_gen_dir/ejdb2/iowow/iwuuid.h",
     "$target_gen_dir/ejdb2/iowow/iwxstr.h",
