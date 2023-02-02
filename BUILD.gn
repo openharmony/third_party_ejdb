@@ -133,7 +133,39 @@ ohos_shared_library("ejdb") {
     ":copy_iowow_header",
     "//third_party/iowow:iowow",
   ]
+  version_script = "libejdb.map"
+  part_name = "ejdb"
+  subsystem_name = "thirdparty"
+}
 
+ohos_static_library("ejdb_static_lib_for_tdd") {
+  configs = [ ":ejdb_config" ]
+
+  public_configs = [ ":ejdb_public_config" ]
+
+  sources = [
+    "src/ejdb2.c",
+    "src/jbi/jbi_consumer.c",
+    "src/jbi/jbi_dup_scanner.c",
+    "src/jbi/jbi_full_scanner.c",
+    "src/jbi/jbi_pk_scanner.c",
+    "src/jbi/jbi_selection.c",
+    "src/jbi/jbi_sorter_consumer.c",
+    "src/jbi/jbi_uniq_scanner.c",
+    "src/jbi/jbi_util.c",
+    "src/jbl/binn.c",
+    "src/jbl/jbl.c",
+    "src/jbl/jbl_json.c",
+    "src/jql/jql.c",
+    "src/jql/jqp.c",
+    "src/util/lwre.c",
+    "src/util/utf8proc.c",
+  ]
+
+  deps = [
+    ":copy_iowow_header",
+    "//third_party/iowow:iowow",
+  ]
   part_name = "ejdb"
   subsystem_name = "thirdparty"
 }
