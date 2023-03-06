@@ -90,6 +90,8 @@ config("ejdb_config") {
     "-fsigned-char",
     "-pedantic",
     "-std=gnu11",
+    "-Wno-unused-but-set-variable",
+    "-Wno-strict-prototypes",
   ]
 
   defines = [
