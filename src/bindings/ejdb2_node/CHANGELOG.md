@@ -1,3 +1,3 @@
 ejdb_node (@EJDB2_NODE_VERSION@)
 
-- Fixed Stalling under stress issue (#306)
+- Upgraded to ejdb2 v@PROJECT_VERSION@

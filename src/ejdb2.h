@@ -7,7 +7,7 @@
  *
  * MIT License
  *
- * Copyright (c) 2012-2021 Softmotions Ltd <info@softmotions.com>
+ * Copyright (c) 2012-2022 Softmotions Ltd <info@softmotions.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -99,7 +99,9 @@ typedef struct _EJDB_HTTP {
                                      Otherwise HTTP server will be started in background. */
   bool   read_anon;             /**< Allow anonymous read-only database access */
   size_t max_body_size;         /**< Maximum WS/HTTP API body size. Default: 64Mb, Min: 512K */
-  bool cors;                    /**< Allow CORS */
+  bool   cors;                  /**< Allow CORS */
+  const char *ssl_private_key;  /**< Path to TLS 1.2 private key PEM */
+  const char *ssl_certs;        /**< Path to TLS 1.2 certificates  */
 } EJDB_HTTP;
 
 /**
@@ -468,6 +470,19 @@ IW_EXPORT WUR iwrc ejdb_merge_or_put_jbl(EJDB db, const char *coll, JBL patch, i
 IW_EXPORT WUR iwrc ejdb_put(EJDB db, const char *coll, JBL jbl, int64_t id);
 
 /**
+ * @brief Save a given `jbn` document under specified `id`.
+ *
+ * @param db        Database handle. Not zero.
+ * @param coll      Collection name. Not zero.
+ * @param jbn       JSON document. Not zero.
+ * @param id        Document identifier. Not zero.
+ *
+ * @return `0` on success.
+ *          Any non zero error codes.
+ */
+IW_EXPORT WUR iwrc ejdb_put_jbn(EJDB db, const char *coll, JBL_NODE jbn, int64_t id);
+
+/**
  * @brief Save a document into `coll` under new identifier.
  *
  * @param db          Database handle. Not zero.
@@ -676,12 +691,12 @@ IW_EXPORT iwrc ejdb_get_iwkv(EJDB db, IWKV *kvp);
 /**
  * @brief  Return `\0` terminated ejdb2 source GIT revision hash.
  */
-IW_EXPORT const char *ejdb_git_revision(void);
+IW_EXPORT const char* ejdb_git_revision(void);
 
 /**
  * @brief Return `\0` terminated EJDB version string.
  */
-IW_EXPORT const char *ejdb_version_full(void);
+IW_EXPORT const char* ejdb_version_full(void);
 
 /**
  * @brief Return major library version.

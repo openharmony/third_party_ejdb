@@ -34,6 +34,7 @@ typedef struct {
   jqval_type_t type;
   void (*freefn)(void*, void*);
   void *freefn_op;
+  int   refs;
   union {
     JBL_NODE    vnode;
     binn       *vbinn;
@@ -45,9 +46,9 @@ typedef struct {
   };
 } JQVAL;
 
-JQVAL *jql_find_placeholder(JQL q, const char *name);
+JQVAL* jql_find_placeholder(JQL q, const char *name);
 
-JQVAL *jql_unit_to_jqval(JQP_AUX *aux, JQPUNIT *unit, iwrc *rcp);
+JQVAL* jql_unit_to_jqval(JQP_AUX *aux, JQPUNIT *unit, iwrc *rcp);
 
 bool jql_jqval_as_int(JQVAL *jqval, int64_t *out);
 

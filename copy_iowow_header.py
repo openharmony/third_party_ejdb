@@ -27,13 +27,9 @@ def copy_file(src_dir, dst_dir):
         'fs/iwfile.h',
         'fs/iwfsmfile.h',
         'iowow.h',
-        #'kv/iwal.h',
         'kv/iwkv.h',
-        #'kv/iwkv_internal.h',
-        #'kv/tests/iwkv_tests.h',
         'log/iwlog.h',
         'platform/iwp.h',
-        #'platform/win32/mman/mman.h',
         'rdb/iwrdb.h',
         'tmpl/iwcfg.h',
         'utils/iwarr.h',
@@ -41,6 +37,7 @@ def copy_file(src_dir, dst_dir):
         'utils/iwconv.h',
         'utils/iwhmap.h',
         'utils/iwpool.h',
+        'utils/iwre.h',
         'utils/iwsha2.h',
         'utils/iwstree.h',
         'utils/iwstw.h',
@@ -48,12 +45,7 @@ def copy_file(src_dir, dst_dir):
         'utils/iwutils.h',
         'utils/iwuuid.h',
         'utils/iwxstr.h',
-        #'utils/kbtree.h',
-        #'utils/khash.h',
-        #'utils/ksort.h',
-        #'utils/mt19937ar.h',
         'utils/murmur3.h',
-        #'utils/pthread_spin_lock_shim.h'
     ]
     for header in headers:
         src_file = os.path.join(src_dir, header)

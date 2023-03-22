@@ -11,7 +11,12 @@
 
 IW_INLINE int _jbl_printf_estimate_size(const char *format, va_list ap) {
   char buf[1];
-  return vsnprintf(buf, sizeof(buf), format, ap) + 1;
+  int ret = vsnprintf(buf, sizeof(buf), format, ap);
+  if (ret < 0) {
+    return ret;
+  } else {
+    return ret + 1;
+  }
 }
 
 IW_INLINE void _jbn_remove_item(JBL_NODE parent, JBL_NODE child);
@@ -39,7 +44,7 @@ void jbl_set_user_data(JBL jbl, void *user_data, void (*user_data_free_fn)(void*
   binn_set_user_data(&jbl->bn, user_data, user_data_free_fn);
 }
 
-void *jbl_get_user_data(JBL jbl) {
+void* jbl_get_user_data(JBL jbl) {
   return jbl->bn.user_data;
 }
 
@@ -121,6 +126,10 @@ iwrc jbl_set_string_printf(JBL jbl, const char *key, const char *format, ...) {
 
   va_start(ap, format);
   int size = _jbl_printf_estimate_size(format, ap);
+  if (size < 0) {
+    va_end(ap);
+    return IW_ERROR_INVALID_ARGS;
+  }
   va_end(ap);
 
   va_start(ap, format);
@@ -141,6 +150,10 @@ iwrc jbl_from_json_printf_va(JBL *jblp, const char *format, va_list va) {
 
   va_copy(cva, va);
   int size = _jbl_printf_estimate_size(format, va);
+  if (size < 0) {
+    va_end(cva);
+    return IW_ERROR_INVALID_ARGS;
+  }
   char *buf = malloc(size);
   RCGA(buf, finish);
   vsnprintf(buf, size, format, cva);
@@ -168,6 +181,10 @@ iwrc jbn_from_json_printf_va(JBL_NODE *node, IWPOOL *pool, const char *format, v
 
   va_copy(cva, va);
   int size = _jbl_printf_estimate_size(format, va);
+  if (size < 0) {
+    va_end(cva);
+    return IW_ERROR_INVALID_ARGS;
+  }
   char *buf = malloc(size);
   RCGA(buf, finish);
   vsnprintf(buf, size, format, cva);
@@ -614,7 +631,6 @@ static iwrc _jbl_as_json(binn *bn, jbl_json_printer pt, void *op, int lvl, jbl_p
 } while (0)
 
   switch (bn->type) {
-
     case BINN_LIST:
       if (!binn_iter_init(&iter, bn, bn->type)) {
         rc = JBL_ERROR_INVALID;
@@ -910,7 +926,7 @@ double jbl_get_f64(JBL jbl) {
   }
 }
 
-const char *jbl_get_str(JBL jbl) {
+const char* jbl_get_str(JBL jbl) {
   assert(jbl && jbl->bn.type == BINN_STRING);
   if (jbl->bn.type != BINN_STRING) {
     return 0;
@@ -1281,7 +1297,7 @@ IW_INLINE bool _jbn_visitor_update_jptr_cursor(JBN_VCTX *vctx, int lvl, const ch
       }
       int jplen = (int) strlen(jp->n[lvl]);
       if ((  (idx == jplen)
-          && !strncmp(keyptr, jp->n[lvl], idx)) || ((jp->n[lvl][0] == '*') && (jp->n[lvl][1] == '\0') )) {
+          && !strncmp(keyptr, jp->n[lvl], idx)) || ((jp->n[lvl][0] == '*') && (jp->n[lvl][1] == '\0'))) {
         vctx->pos = lvl;
         return (jp->cnt == lvl + 1);
       }
@@ -1711,7 +1727,9 @@ iwrc jbn_add_item_bool(JBL_NODE parent, const char *key, bool val, JBL_NODE *nod
   n->type = JBV_BOOL;
   n->vbool = val;
   jbn_add_item(parent, n);
-
+  if (node_out) {
+    *node_out = n;
+  }
 finish:
   return rc;
 }
@@ -1775,7 +1793,8 @@ iwrc jbn_copy_path(
   const char *target_path,
   bool        overwrite_on_nulls,
   bool        no_src_clone,
-  IWPOOL     *pool) {
+  IWPOOL     *pool
+  ) {
   if (!src || !src_path || !target || !target_path || !pool) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -1823,7 +1842,8 @@ IW_EXPORT iwrc jbn_copy_paths(
   const char **paths,
   bool         overwrite_on_nulls,
   bool         no_src_clone,
-  IWPOOL      *pool) {
+  IWPOOL      *pool
+  ) {
   if (!target || !src || !paths || !pool) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -1878,7 +1898,8 @@ static iwrc _jbl_create_node(
   const char *key,
   int         klidx,
   JBL_NODE   *node,
-  bool        clone_strings) {
+  bool        clone_strings
+  ) {
   iwrc rc = 0;
   JBL_NODE n = iwpool_alloc(sizeof(*n), ctx->pool);
   if (node) {
@@ -1992,7 +2013,8 @@ static iwrc _jbl_node_from_binn_impl(
   JBL_NODE    parent,
   char       *key,
   int         klidx,
-  bool        clone_strings) {
+  bool        clone_strings
+  ) {
   binn bv;
   binn_iter iter;
   iwrc rc = 0;
@@ -2248,7 +2270,6 @@ int jbn_compare_nodes(JBL_NODE n1, JBL_NODE n2, iwrc *rcp) {
 }
 
 static iwrc _jbl_target_apply_patch(JBL_NODE target, const JBL_PATCHEXT *ex, IWPOOL *pool) {
-
   struct _JBL_NODE *ntmp;
   jbp_patch_t op = ex->p->op;
   JBL_PTR path = ex->path;
@@ -2850,7 +2871,6 @@ finish:
 }
 
 iwrc jbl_merge_patch_jbl(JBL jbl, JBL patch) {
-
   IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
@@ -2883,7 +2903,7 @@ iwrc jbn_patch_auto(JBL_NODE root, JBL_NODE patch, IWPOOL *pool) {
 }
 
 iwrc jbn_merge_patch(JBL_NODE root, JBL_NODE patch, IWPOOL *pool) {
-  if (!root || !patch || pool || (root->type != JBV_OBJECT)) {
+  if (!root || !patch || !pool || (root->type != JBV_OBJECT)) {
     return IW_ERROR_INVALID_ARGS;
   }
   iwrc rc = 0;
@@ -2891,7 +2911,7 @@ iwrc jbn_merge_patch(JBL_NODE root, JBL_NODE patch, IWPOOL *pool) {
   return rc;
 }
 
-static const char *_jbl_ecodefn(locale_t locale, uint32_t ecode) {
+static const char* _jbl_ecodefn(locale_t locale, uint32_t ecode) {
   if (!((ecode > _JBL_ERROR_START) && (ecode < _JBL_ERROR_END))) {
     return 0;
   }

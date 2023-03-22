@@ -8,7 +8,7 @@
  *
  * MIT License
  *
- * Copyright (c) 2012-2021 Softmotions Ltd <info@softmotions.com>
+ * Copyright (c) 2012-2022 Softmotions Ltd <info@softmotions.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -56,6 +56,8 @@ typedef uint16_t jqp_string_flavours_t;
 #define JQP_STR_DBL_STAR ((jqp_string_flavours_t) 0x80U)
 /** Projection JOIN */
 #define JQP_STR_PROJOIN ((jqp_string_flavours_t) 0x100U)
+/** Projection path */
+#define JQP_STR_PROJPATH ((jqp_string_flavours_t) 0x200U)
 
 
 typedef uint8_t jqp_int_flavours_t;

@@ -7,7 +7,7 @@
  *
  * MIT License
  *
- * Copyright (c) 2012-2021 Softmotions Ltd <info@softmotions.com>
+ * Copyright (c) 2012-2022 Softmotions Ltd <info@softmotions.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -150,7 +150,7 @@ typedef iwrc (*JB_SCAN_CONSUMER)(
   int64_t *step, bool *matched, iwrc err);
 
 /**
- * @brief Index can sorter consumer context
+ * @brief Index scan sorter consumer context
  */
 struct _JBSSC {
   iwrc      rc;               /**< RC code used for in `_jb_do_sorting` */
