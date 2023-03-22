@@ -5,7 +5,7 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif()
 
-set(MODULES util jbl jql jbi)
+set(MODULES util jql jbi)
 set(PROJECT_LLIBRARIES)
 set(PROJECT_INCLUDE_DIRS)
 set(ALL_SRC)
@@ -33,6 +33,15 @@ include(CheckIncludeFile)
 include(CheckIncludeFiles)
 include(CheckLibraryExists)
 include(TestBigEndian)
+
+find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
+if(CMAKE_USE_WIN32_THREADS_INIT)
+  add_definitions(-DJB_WIN32_THREADS)
+elseif(CMAKE_USE_PTHREADS_INIT)
+  add_definitions(-DJB_PTHREADS)
+else()
+  mesage(FATAL_ERROR "Unable to find suitable threading library")
+endif(CMAKE_USE_WIN32_THREADS_INIT)
 
 include(AddIOWOW)
 
@@ -68,15 +77,6 @@ endif()
 if(BUILD_TESTS)
   add_definitions(-DIW_TESTS)
 endif()
-
-find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
-if(CMAKE_USE_WIN32_THREADS_INIT)
-  add_definitions(-DJB_WIN32_THREADS)
-elseif(CMAKE_USE_PTHREADS_INIT)
-  add_definitions(-DJB_PTHREADS)
-else()
-  mesage(FATAL_ERROR "Unable to find suitable threading library")
-endif(CMAKE_USE_WIN32_THREADS_INIT)
 
 if(ANDROID)
   find_library(LOG_LIB log)
@@ -130,10 +130,9 @@ foreach(MODULE IN LISTS MODULES)
   list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
 endforeach(MODULE)
 
-list(
-  APPEND PUB_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/ejdb2.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/jbl/jbl.h ${CMAKE_CURRENT_SOURCE_DIR}/jbr/jbr.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/jql/jql.h)
+list(APPEND PUB_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/ejdb2.h
+     ${CMAKE_CURRENT_SOURCE_DIR}/jbr/jbr.h
+     ${CMAKE_CURRENT_SOURCE_DIR}/jql/jql.h)
 
 set(CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} -std=gnu11 -fsigned-char -Wfatal-errors -Wall -Wextra \
@@ -340,11 +339,16 @@ if(BUILD_SHARED_LIBS AND DO_INSTALL_CORE)
 endif()
 
 if(DO_INSTALL_CORE)
+  if(INSTALL_FLAT_SUBPROJECT_INCLUDES)
+    set(INCLUDES_DEST ${CMAKE_INSTALL_INCLUDEDIR})
+  else()
+    set(INCLUDES_DEST ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+  endif()
 
   if(DEFINED IWNET_INCLUDE_DIR)
     install(
       DIRECTORY ${IWNET_INCLUDE_DIR}/iwnet
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+      DESTINATION ${INCLUDES_DEST}
       COMPONENT headers
       FILES_MATCHING
       PATTERN "*.h")
@@ -352,7 +356,7 @@ if(DO_INSTALL_CORE)
 
   install(
     DIRECTORY ${IOWOW_INCLUDE_DIR}/iowow
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+    DESTINATION ${INCLUDES_DEST}
     COMPONENT headers
     FILES_MATCHING
     PATTERN "*.h")

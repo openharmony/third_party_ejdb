@@ -3,7 +3,7 @@
     "Name": "EJDB2",
     "License": "MIT License",
     "License File": "LICENSE",
-    "Version Number": "v2.72",
+    "Version Number": "v2.73",
     "Owner": "kutcher.zhou@huawei.com",
     "Upstream URL": "https://github.com/Softmotions/ejdb",
     "Description": "An embeddable JSON database engine"

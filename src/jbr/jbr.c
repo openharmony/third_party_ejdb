@@ -1,8 +1,8 @@
 #include "jbr.h"
 #include "ejdb2_internal.h"
 
-#include <iwnet/ws_server.h>
-#include <iwnet/pairs.h>
+#include <iwnet/iwn_ws_server.h>
+#include <iwnet/iwn_pairs.h>
 #include <iowow/iwconv.h>
 
 #include <pthread.h>
@@ -345,11 +345,12 @@ static iwrc _query_visitor(EJDB_EXEC *ux, EJDB_DOC doc, int64_t *step) {
   }
 
   if (ctx->visitor_started) {
+    size_t sz = iwxstr_size(xstr);
+    char *buf = iwxstr_destroy_keep_ptr(xstr);
     pthread_mutex_lock(&ctx->mtx);
-    iwn_val_add_new(&ctx->vals, iwxstr_ptr(xstr), iwxstr_size(xstr));
+    iwn_val_add_new(&ctx->vals, buf, sz);
     pthread_cond_broadcast(&ctx->cond);
     pthread_mutex_unlock(&ctx->mtx);
-    iwxstr_destroy_keep_ptr(xstr);
   } else {
     ctx->visitor_started = true;
     RCC(rc, finish, iwn_http_response_chunk_write(
@@ -996,8 +997,8 @@ static bool _on_ws_msg_impl(struct iwn_ws_sess *ws, struct mctx *mctx, const cha
         msg[len] = '\0';
         return _ws_query(ws, mctx, msg, (wsop == JBWS_EXPLAIN));
       default: {
-        char nbuf[JBNUMBUF_SIZE];
-        for (pos = 0; pos < len && pos < JBNUMBUF_SIZE - 1 && isdigit(msg[pos]); ++pos) {
+        char nbuf[IWNUMBUF_SIZE];
+        for (pos = 0; pos < len && pos < IWNUMBUF_SIZE - 1 && isdigit(msg[pos]); ++pos) {
           nbuf[pos] = msg[pos];
         }
         nbuf[pos] = '\0';
@@ -1034,7 +1035,7 @@ static bool _on_ws_msg_impl(struct iwn_ws_sess *ws, struct mctx *mctx, const cha
   }
 }
 
-static bool _on_ws_msg(struct iwn_ws_sess *ws, const char *msg, size_t len) {
+static bool _on_ws_msg(struct iwn_ws_sess *ws, const char *msg, size_t len, uint8_t frame) {
   struct mctx mctx = {
     .ctx = ws->req->http->user_data,
   };

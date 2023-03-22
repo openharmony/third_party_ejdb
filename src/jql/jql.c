@@ -1,10 +1,8 @@
-#include "convert.h"
 #include "ejdb2_internal.h"
-#include "jbl_internal.h"
 #include "jql_internal.h"
 #include "jqp.h"
 
-#include <ejdb2/iowow/iwre.h>
+#include <iowow/iwre.h>
 
 #include <errno.h>
 
@@ -43,8 +41,8 @@ IW_INLINE void _jql_jqval_destroy(JQP_STRING *pv) {
         ptr = (void*) qv->vstr;
         break;
       case JQVAL_RE:
-        ptr = (void*) qv->vre->expression;
-        iwre_free(qv->vre);
+        ptr = (void*) iwre_pattern_get(qv->vre);
+        iwre_destroy(qv->vre);
         break;
       case JQVAL_JBLNODE:
         ptr = qv->vnode;
@@ -81,8 +79,8 @@ static iwrc _jql_set_placeholder(JQL q, const char *placeholder, int index, JQVA
   JQP_AUX *aux = q->aux;
   iwrc rc = JQL_ERROR_INVALID_PLACEHOLDER;
   if (!placeholder) { // Index
-    char nbuf[JBNUMBUF_SIZE];
-    iwitoa(index, nbuf, JBNUMBUF_SIZE);
+    char nbuf[IWNUMBUF_SIZE];
+    iwitoa(index, nbuf, IWNUMBUF_SIZE);
     for (JQP_STRING *pv = aux->start_placeholder; pv; pv = pv->placeholder_next) {
       if ((pv->value[0] == '?') && !strcmp(pv->value + 1, nbuf)) {
         if ((pv->flavour & (JQP_STR_PROJFIELD | JQP_STR_PROJPATH)) && val->type != JQVAL_STR) {
@@ -206,6 +204,13 @@ iwrc jql_set_str2(
   JQL q, const char *placeholder, int index, const char *val,
   void (*freefn)(void*, void*), void *op
   ) {
+  if (val == 0) {
+    if (freefn) {
+      freefn((void*) val, op);
+    }
+    return jql_set_null(q, placeholder, index);
+  }
+
   JQVAL *qv = malloc(sizeof(*qv));
   if (!qv) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
@@ -227,6 +232,18 @@ iwrc jql_set_str2(
 
 iwrc jql_set_str(JQL q, const char *placeholder, int index, const char *val) {
   return jql_set_str2(q, placeholder, index, val, 0, 0);
+}
+
+static void _freefn_str(void *v, void *op) {
+  free(v);
+}
+
+iwrc jql_set_str3(JQL q, const char *placeholder, int index, const char *val_, size_t val_len) {
+  char *val = strndup(val_, val_len);
+  if (!val) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  return jql_set_str2(q, placeholder, index, val, _freefn_str, 0);
 }
 
 iwrc jql_set_bool(JQL q, const char *placeholder, int index, bool val) {
@@ -252,9 +269,11 @@ iwrc jql_set_regexp2(
   ) {
   iwrc rc = 0;
   JQVAL *qv = 0;
-  struct re *rx = 0;
-
-  RCA(rx = iwre_new(expr), finish);
+  struct iwre *rx = iwre_create(expr);
+  if (!rx) {
+    rc = JQL_ERROR_REGEXP_INVALID;
+    goto finish;
+  }
   RCA(qv = malloc(sizeof(*qv)), finish);
   qv->refs = 0;
   qv->freefn = freefn;
@@ -268,7 +287,7 @@ finish:
     if (freefn) {
       freefn((void*) expr, op);
     }
-    iwre_free(rx);
+    iwre_destroy(rx);
     free(qv);
   }
   return rc;
@@ -455,7 +474,7 @@ void jql_destroy(JQL *qptr) {
     for (JQP_OP *op = aux->start_op; op; op = op->next) {
       if (op->opaque) {
         if (op->value == JQP_OP_RE) {
-          iwre_free(op->opaque);
+          iwre_destroy(op->opaque);
         }
       }
     }
@@ -604,14 +623,14 @@ static int _jql_cmp_jqval_pair(const JQVAL *left, const JQVAL *right, iwrc *rcp)
         case JQVAL_BOOL:
           return !strcmp(lv->vstr, "true") - rv->vbool;
         case JQVAL_I64: {
-          char nbuf[JBNUMBUF_SIZE];
-          iwitoa(rv->vi64, nbuf, JBNUMBUF_SIZE);
+          char nbuf[IWNUMBUF_SIZE];
+          iwitoa(rv->vi64, nbuf, IWNUMBUF_SIZE);
           return strcmp(lv->vstr, nbuf);
         }
         case JQVAL_F64: {
           size_t osz;
-          char nbuf[JBNUMBUF_SIZE];
-          jbi_ftoa(rv->vf64, nbuf, &osz);
+          char nbuf[IWNUMBUF_SIZE];
+          iwjson_ftoa(rv->vf64, nbuf, &osz);
           return strcmp(lv->vstr, nbuf);
         }
         case JQVAL_NULL:
@@ -729,15 +748,12 @@ static bool _jql_match_regexp(
   JQVAL *left, JQP_OP *jqop, JQVAL *right,
   iwrc *rcp
   ) {
-  struct re *rx;
-  char nbuf[JBNUMBUF_SIZE];
-  static_assert(JBNUMBUF_SIZE >= IWFTOA_BUFSIZE, "JBNUMBUF_SIZE >= IWFTOA_BUFSIZE");
+  struct iwre *rx;
+  char nbuf[IWNUMBUF_SIZE];
   JQVAL sleft, sright; // Stack allocated left/right converted values
   JQVAL *lv = left, *rv = right;
   char *input = 0;
-  size_t rci, match_end = 0;
   const char *expr = 0;
-  bool match_start = false;
 
   if (lv->type == JQVAL_JBLNODE) {
     _jql_node_to_jqval(lv->vnode, &sleft);
@@ -765,7 +781,7 @@ static bool _jql_match_regexp(
         expr = rv->vstr;
         break;
       case JQVAL_I64: {
-        iwitoa(rv->vi64, nbuf, JBNUMBUF_SIZE);
+        iwitoa(rv->vi64, nbuf, IWNUMBUF_SIZE);
         expr = iwpool_strdup(aux->pool, nbuf, rcp);
         if (*rcp) {
           return false;
@@ -774,7 +790,7 @@ static bool _jql_match_regexp(
       }
       case JQVAL_F64: {
         size_t osz;
-        jbi_ftoa(rv->vf64, nbuf, &osz);
+        iwjson_ftoa(rv->vf64, nbuf, &osz);
         expr = iwpool_strdup(aux->pool, nbuf, rcp);
         if (*rcp) {
           return false;
@@ -790,42 +806,25 @@ static bool _jql_match_regexp(
     }
 
     assert(expr);
-    if (expr[0] == '^') {
-      expr += 1;
-      match_start = true;
-    }
-    rci = strlen(expr);
-    if (rci && (expr[rci - 1] == '$')) {
-      char *aexpr = iwpool_alloc(rci, aux->pool);
-      if (!aexpr) {
-        *rcp = iwrc_set_errno(IW_ERROR_ALLOC, errno);
-        return false;
-      }
-      match_end = rci - 1;
-      memcpy(aexpr, expr, match_end);
-      aexpr[rci - 1] = '\0';
-      expr = aexpr;
-    }
-    rx = iwre_new(expr);
+    rx = iwre_create(expr);
     if (!rx) {
-      *rcp = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+      *rcp = JQL_ERROR_REGEXP_INVALID;
       return false;
     }
     jqop->opaque = rx;
   }
-  assert(rx);
 
   switch (lv->type) {
     case JQVAL_STR:
       input = (char*) lv->vstr;
       break;
     case JQVAL_I64:
-      iwitoa(lv->vi64, nbuf, JBNUMBUF_SIZE);
+      iwitoa(lv->vi64, nbuf, IWNUMBUF_SIZE);
       input = nbuf;
       break;
     case JQVAL_F64: {
       size_t osz;
-      jbi_ftoa(lv->vf64, nbuf, &osz);
+      iwjson_ftoa(lv->vf64, nbuf, &osz);
       input = nbuf;
     }
     break;
@@ -836,39 +835,9 @@ static bool _jql_match_regexp(
       *rcp = _JQL_ERROR_UNMATCHED;
       return false;
   }
-
-  assert(input);
-  int mret = iwre_match(rx, input);
-  switch (mret) {
-    case RE_ERROR_NOMATCH:
-      return false;
-    case RE_ERROR_NOMEM:
-      *rcp = iwrc_set_errno(IW_ERROR_ALLOC, errno);
-      return false;
-    case RE_ERROR_CHARSET:
-      *rcp = JQL_ERROR_REGEXP_CHARSET;
-      return false;
-    case RE_ERROR_SUBEXP:
-      *rcp = JQL_ERROR_REGEXP_SUBEXP;
-      return false;
-    case RE_ERROR_SUBMATCH:
-      *rcp = JQL_ERROR_REGEXP_SUBMATCH;
-      return false;
-    case RE_ERROR_ENGINE:
-      *rcp = JQL_ERROR_REGEXP_ENGINE;
-      iwlog_ecode_error3(JQL_ERROR_REGEXP_ENGINE);
-      return false;
-  }
-  if (mret > 0) {
-    if (match_start && (rx->position - mret != input)) {
-      return false;
-    }
-    if (match_end && (rx->position != input + match_end)) {
-      return false;
-    }
-    return true;
-  }
-  return false;
+  const char *mpairs[IWRE_MAX_MATCHES];
+  int mret = iwre_match(rx, input, mpairs, IWRE_MAX_MATCHES);
+  return mret > 0;
 }
 
 static bool _jql_match_in(
@@ -956,8 +925,8 @@ static bool _jql_match_starts(
   ) {
   JQVAL sleft; // Stack allocated left/right converted values
   JQVAL *lv = left, *rv = right;
-  char nbuf[JBNUMBUF_SIZE];
-  char nbuf2[JBNUMBUF_SIZE];
+  char nbuf[IWNUMBUF_SIZE];
+  char nbuf2[IWNUMBUF_SIZE];
   char *input = 0, *prefix = 0;
 
   if (lv->type == JQVAL_JBLNODE) {
@@ -972,12 +941,12 @@ static bool _jql_match_starts(
       input = (char*) lv->vstr;
       break;
     case JQVAL_I64:
-      iwitoa(lv->vi64, nbuf, JBNUMBUF_SIZE);
+      iwitoa(lv->vi64, nbuf, IWNUMBUF_SIZE);
       input = nbuf;
       break;
     case JQVAL_F64: {
       size_t osz;
-      jbi_ftoa(lv->vf64, nbuf, &osz);
+      iwjson_ftoa(lv->vf64, nbuf, &osz);
       input = nbuf;
       break;
     }
@@ -993,12 +962,12 @@ static bool _jql_match_starts(
       prefix = (char*) rv->vstr;
       break;
     case JQVAL_I64:
-      iwitoa(rv->vi64, nbuf2, JBNUMBUF_SIZE);
+      iwitoa(rv->vi64, nbuf2, IWNUMBUF_SIZE);
       prefix = nbuf2;
       break;
     case JQVAL_F64: {
       size_t osz;
-      jbi_ftoa(rv->vf64, nbuf2, &osz);
+      iwjson_ftoa(rv->vf64, nbuf2, &osz);
       prefix = nbuf2;
       break;
     }
@@ -1426,7 +1395,7 @@ static bool _jql_match_expression_node(JQP_EXPR_NODE *en, MCTX *mctx, iwrc *rcp)
 }
 
 static jbl_visitor_cmd_t _jql_match_visitor(int lvl, binn *bv, const char *key, int idx, JBL_VCTX *vctx, iwrc *rcp) {
-  char nbuf[JBNUMBUF_SIZE];
+  char nbuf[IWNUMBUF_SIZE];
   const char *nkey = key;
   JQL q = vctx->op;
   if (!nkey) {
@@ -1672,7 +1641,7 @@ static bool _jql_proj_join_matched(
       // Unable to convert current node value as int number
       return false;
     }
-    IWSTREE *cache = exec_ctx->proj_joined_nodes_cache;
+    IWHMAP *cache = exec_ctx->proj_joined_nodes_cache;
     IWPOOL *pool = exec_ctx->ux->pool;
     if (!pool) {
       pool = exec_ctx->proj_joined_nodes_pool;
@@ -1682,7 +1651,7 @@ static bool _jql_proj_join_matched(
         exec_ctx->proj_joined_nodes_pool = pool;
       } else if (cache && (iwpool_used_size(pool) > 10 * 1024 * 1024)) { // 10Mb
         exec_ctx->proj_joined_nodes_cache = 0;
-        iwstree_destroy(cache);
+        iwhmap_destroy(exec_ctx->proj_joined_nodes_cache);
         cache = 0;
         iwpool_destroy(pool);
         pool = iwpool_create(1024 * 1024); // 1Mb
@@ -1690,15 +1659,14 @@ static bool _jql_proj_join_matched(
       }
     }
     if (!cache) {
-      cache = iwstree_create(jb_proj_node_cache_cmp, jb_proj_node_kvfree);
-      RCGA(cache, finish);
+      RCB(finish, cache = iwhmap_create(jb_proj_node_cache_cmp, jb_proj_node_hash, jb_proj_node_kvfree));
       exec_ctx->proj_joined_nodes_cache = cache;
     }
     struct _JBDOCREF ref = {
       .id   = id,
       .coll = coll
     };
-    nn = iwstree_get(cache, &ref);
+    nn = iwhmap_get(cache, &ref);
     if (!nn) {
       rc = jb_collection_join_resolver(id, coll, &jbl, exec_ctx);
       if (rc) {
@@ -1710,11 +1678,11 @@ static bool _jql_proj_join_matched(
         }
         goto finish;
       }
-      RCHECK(rc, finish, jbl_to_node(jbl, &nn, true, pool));
+      RCC(rc, finish, jbl_to_node(jbl, &nn, true, pool));
       struct _JBDOCREF *refkey = malloc(sizeof(*refkey));
       RCGA(refkey, finish);
       *refkey = ref;
-      RCHECK(rc, finish, iwstree_put(cache, refkey, nn));
+      RCC(rc, finish, iwhmap_put(cache, refkey, nn));
     }
     jbn_apply_from(n, nn);
     proj->pos = lvl;
@@ -1729,13 +1697,13 @@ finish:
 static jbn_visitor_cmd_t _jql_proj_visitor(int lvl, JBL_NODE n, const char *key, int klidx, JBN_VCTX *vctx, iwrc *rc) {
   PROJ_CTX *pctx = vctx->op;
   const char *keyptr;
-  char buf[JBNUMBUF_SIZE];
+  char buf[IWNUMBUF_SIZE];
   if (key) {
     keyptr = key;
   } else if (lvl < 0) {
     return 0;
   } else {
-    iwitoa(klidx, buf, JBNUMBUF_SIZE);
+    iwitoa(klidx, buf, IWNUMBUF_SIZE);
     keyptr = buf;
     klidx = (int) strlen(keyptr);
   }
@@ -1881,14 +1849,6 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Found unset placeholder (JQL_ERROR_UNSET_PLACEHOLDER)";
     case JQL_ERROR_REGEXP_INVALID:
       return "Invalid regular expression (JQL_ERROR_REGEXP_INVALID)";
-    case JQL_ERROR_REGEXP_CHARSET:
-      return "Invalid regular expression: expected ']' at end of character set (JQL_ERROR_REGEXP_CHARSET)";
-    case JQL_ERROR_REGEXP_SUBEXP:
-      return "Invalid regular expression: expected ')' at end of subexpression (JQL_ERROR_REGEXP_SUBEXP)";
-    case JQL_ERROR_REGEXP_SUBMATCH:
-      return "Invalid regular expression: expected '}' at end of submatch (JQL_ERROR_REGEXP_SUBMATCH)";
-    case JQL_ERROR_REGEXP_ENGINE:
-      return "Illegal instruction in compiled regular expression (please report this bug) (JQL_ERROR_REGEXP_ENGINE)";
     case JQL_ERROR_SKIP_ALREADY_SET:
       return "Skip clause already specified (JQL_ERROR_SKIP_ALREADY_SET)";
     case JQL_ERROR_LIMIT_ALREADY_SET:

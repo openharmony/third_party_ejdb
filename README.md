@@ -26,7 +26,7 @@ EJDB2 is an embeddable JSON database engine published under MIT license.
 * [Native language bindings](#native-language-bindings)
 * Supported platforms
   * [macOS](#osx)
-  * [iOS](https://github.com/Softmotions/EJDB2Swift) (outdated)
+  * [iOS](https://github.com/Softmotions/EJDB2Swift)
   * [Linux](#linux)
   * [Android](#android)
   * [Windows](#windows)
@@ -45,6 +45,8 @@ EJDB2 is an embeddable JSON database engine published under MIT license.
 * [C API](#c-api)
 * [License](#license)
 ---
+
+[![EJDB2 Presentation](https://iowow.softmotions.com/articles/ejdb-presentation-cover.png)](https://iowow.softmotions.com/articles/ejdb/)
 
 ## EJDB2 platforms matrix
 
@@ -76,6 +78,8 @@ EJDB2 is an embeddable JSON database engine published under MIT license.
 
 ### Unofficial EJDB2 language bindings
 
+* Go
+  * https://github.com/memmaker/go-ejdb2
 * Rust 
   * https://crates.io/crates/ejdb2
 * .Net
@@ -95,15 +99,13 @@ EJDB2 is an embeddable JSON database engine published under MIT license.
 * Old EJDB 1.x version can be found in separate [ejdb_1.x](https://github.com/Softmotions/ejdb/tree/ejdb_1.x) branch.
   We are not maintaining ejdb 1.x.
 
-## Use cases
+## Used by
 
-* Wirow video conferencing platform https://wirow.io
-* Softmotions trading robots
-* [Gimme - social toy tokens exchange mobile application.](https://play.google.com/store/apps/details?id=com.softmotions.gimme) EJDB2 is used both on mobile and server sides.
+* [Wirow video conferencing platform](https://github.com/wirow-io/wirow-server/)
 
 Are you using EJDB? [Let me know!](mailto:info@softmotions.com)
 
-## macOS / OSX
+## macOS
 
 EJDB2 code ported and tested on `High Sierra` / `Mojave` / `Catalina`
 
@@ -114,27 +116,21 @@ Swift binding is outdated at now. Looking for contributors.
 brew install ejdb
 ```
 
-or
+## Building from sources 
+
+cmake v3.12 or higher required
 
 ```
+git clone --recurse-submodules git@github.com:Softmotions/ejdb.git
+
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make install
 ```
 
 ## Linux
-### Ubuntu/Debian
-#### PPA repository
-
-```sh
-sudo add-apt-repository ppa:adamansky/ejdb2
-sudo apt-get update
-sudo apt-get install ejdb2
-```
 
 #### Building debian packages
-
-cmake v3.10 or higher required
 
 ```sh
 mkdir build && cd build
@@ -157,6 +153,13 @@ EJDB2 can be cross-compiled for windows
 Nodejs/Dart bindings not yet ported to Windows.
 
 **[Cross-compilation Guide for Windows](./WINDOWS.md)**
+
+
+## IWSTART
+
+IWSTART is an automatic CMake initial project generator for C projects based on [iowow](https://github.com/Softmotions/iowow) / [iwnet](https://github.com/Softmotions/iwnet) / [ejdb2](https://github.com/Softmotions/ejdb) libs.
+
+https://github.com/Softmotions/iwstart
 
 
 

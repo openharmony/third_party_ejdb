@@ -12,8 +12,11 @@ file(MAKE_DIRECTORY ${IOWOW_INCLUDE_DIR})
 if("${IOWOW_URL}" STREQUAL "")
   if(EXISTS ${CMAKE_SOURCE_DIR}/iowow.zip)
     set(IOWOW_URL ${CMAKE_SOURCE_DIR}/iowow.zip)
-  else()
+  elseif(EXISTS ${CMAKE_SOURCE_DIR}/extra/iowow/CMakeLists.txt)
     set(IOWOW_URL ${CMAKE_SOURCE_DIR}/extra/iowow)
+  else()
+    set(IOWOW_URL
+        https://github.com/Softmotions/iowow/archive/refs/heads/master.zip)
   endif()
 endif()
 
@@ -82,12 +85,10 @@ add_library(IOWOW::static STATIC IMPORTED GLOBAL)
 set_target_properties(
   IOWOW::static
   PROPERTIES IMPORTED_LINK_INTERFACE_LANGUAGES "C"
-             IMPORTED_LOCATION ${BYPRODUCT})
-             
+             IMPORTED_LOCATION ${BYPRODUCT}
+             IMPORTED_LINK_INTERFACE_LIBRARIES "Threads::Threads;m")
+
 add_dependencies(IOWOW::static extern_iowow)
 
-list(PREPEND PROJECT_LLIBRARIES m)
 list(PREPEND PROJECT_LLIBRARIES IOWOW::static)
 list(APPEND PROJECT_INCLUDE_DIRS ${IOWOW_INCLUDE_DIR})
-
-

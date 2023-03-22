@@ -3,7 +3,10 @@
 #define JQL_INTERNAL_H
 
 #include "jqp.h"
-#include "binn.h"
+
+#include <iowow/iwbinn.h>
+#include <iowow/iwre.h>
+
 #include <math.h>
 
 
@@ -41,8 +44,8 @@ typedef struct {
     int64_t     vi64;
     double      vf64;
     const char *vstr;
-    bool       vbool;
-    struct re *vre;
+    struct iwre *vre;
+    bool vbool;
   };
 } JQVAL;
 
