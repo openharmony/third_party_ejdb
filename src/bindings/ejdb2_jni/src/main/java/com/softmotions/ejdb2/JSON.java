@@ -6,13 +6,17 @@ import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.Consumer;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * JSON parser/container.
@@ -23,13 +27,24 @@ import java.util.Objects;
  *
  * - https://github.com/ralfstx/minimal-json (MIT)
  */
-public final class JSON {
+public final class JSON implements Comparable<JSON>, Cloneable {
 
-  public static ObjectBuilder buildObject() {
-    return new ObjectBuilder();
+  private static final Object UNIQ = new Object();
+
+  @Override
+  public Object clone() {
+    if (isContainer()) {
+      return JSON.fromString(toString());
+    } else {
+      return new JSON(type, value);
+    }
   }
 
-  public static ArrayBuilder buildArray() {
+  public static ObjectBuilder object(Object... props) {
+    return new ObjectBuilder().put(props);
+  }
+
+  public static ArrayBuilder array() {
     return new ArrayBuilder();
   }
 
@@ -41,6 +56,10 @@ public final class JSON {
     return new JSON(bytes);
   }
 
+  public static JSON fromBytes(byte[] bytes, int off, int len) {
+    return new JSON(bytes, off, len);
+  }
+
   public static JSON fromMap(Map<String, Object> map) {
     return new JSON(ValueType.OBJECT, map);
   }
@@ -49,9 +68,17 @@ public final class JSON {
     return new JSON(ValueType.ARRAY, list);
   }
 
+  public static JSON fromObject(Object obj) {
+    if (obj instanceof JSON) {
+      return (JSON) obj;
+    } else {
+      return new JSON(ValueType.getTypeOf(obj), obj);
+    }
+  }
+
   private static final ValueType[] valueTypes = new ValueType[256];
-  private static final int[] hexDigits = new int['f' + 1];
-  private static JSON UNKNOWN = new JSON(ValueType.UNKNOWN, null);
+  private static final int[]       hexDigits  = new int['f' + 1];
+  private static JSON              UNKNOWN    = new JSON(ValueType.UNKNOWN, null);
 
   static {
     for (int i = 0; i < valueTypes.length; ++i) {
@@ -91,17 +118,33 @@ public final class JSON {
     }
   }
 
-  public final Object value;
+  public final Object    value;
   public final ValueType type;
 
   private char[] reusableChars = new char[32];
-  private byte[] buf = new byte[0];
-  private int head;
-  private int tail;
+  private byte[] buf           = new byte[0];
+  private int    head;
+  private int    tail;
 
   JSON(byte[] buf) {
     this.buf = buf;
     tail = buf.length;
+    type = whatIsNext();
+    value = read(type);
+    reset();
+  }
+
+  JSON(byte[] buf, int off, int len) {
+    if (buf.length < off + len) {
+      throw new ArrayIndexOutOfBoundsException();
+    }
+    if (off == 0) {
+      this.buf = buf;
+    } else {
+      this.buf = new byte[len - off];
+      System.arraycopy(buf, off, this.buf, 0, len);
+    }
+    tail = len;
     type = whatIsNext();
     value = read(type);
     reset();
@@ -133,6 +176,10 @@ public final class JSON {
     return type == ValueType.UNKNOWN;
   }
 
+  public boolean isNullOrUnknown() {
+    return type == ValueType.NULL || type == ValueType.UNKNOWN;
+  }
+
   public boolean isNull() {
     return type == ValueType.NULL;
   }
@@ -157,8 +204,37 @@ public final class JSON {
     return type == ValueType.ARRAY;
   }
 
+  public boolean isContainer() {
+    return type == ValueType.OBJECT || type == ValueType.ARRAY;
+  }
+
+  public int length() {
+    if (type == ValueType.ARRAY) {
+      return ((List<Object>) value).size();
+    } else if (type == ValueType.OBJECT) {
+      return ((Map<String, Object>) value).size();
+    } else {
+      return 0;
+    }
+  }
+
   public Builder modify() {
     return new Builder(this);
+  }
+
+  public Set<String> keys() {
+    if (type != ValueType.OBJECT) {
+      return Collections.EMPTY_SET;
+    }
+    return ((Map<String, Object>) value).keySet();
+  }
+
+  public String gets(String key) {
+    return get(key).asString();
+  }
+
+  public String gets(int index) {
+    return get(index).asString();
   }
 
   public JSON get(String key) {
@@ -191,6 +267,22 @@ public final class JSON {
     return new JSON(ValueType.getTypeOf(v), v);
   }
 
+  public JSON getOrThrow(String key) {
+    JSON json = get(key);
+    if (json.isUnknown()) {
+      throw new JSONMissingException(key);
+    }
+    return json;
+  }
+
+  public JSON getOrThrow(int index) {
+    JSON json = get(index);
+    if (json.isUnknown()) {
+      throw new JSONMissingException(index);
+    }
+    return json;
+  }
+
   public <T> T cast() {
     return (T) value;
   }
@@ -211,6 +303,20 @@ public final class JSON {
     return asStringOr(null);
   }
 
+  public String[] asStringArray() {
+    if (type != ValueType.ARRAY) {
+      return new String[0];
+    } else {
+      List<Object> list = (List<Object>) value;
+      String[] res = new String[list.size()];
+      for (int i = 0; i < list.size(); ++i) {
+        var v = list.get(i);
+        res[i] = v != null ? String.valueOf(v) : null;
+      }
+      return res;
+    }
+  }
+
   public String asTextOr(String fallbackValue) {
     if (type == ValueType.UNKNOWN) {
       return fallbackValue;
@@ -220,7 +326,7 @@ public final class JSON {
   }
 
   public String asText() {
-    return asTextOr(null);
+    return asTextOr("");
   }
 
   public Boolean asBooleanOr(Boolean fallbackValue) {
@@ -280,6 +386,14 @@ public final class JSON {
       return this;
     }
     return traverse(this, createPointer(pointer));
+  }
+
+  public JSON atOrThrow(String pointer) {
+    JSON json = at(pointer);
+    if (json.isUnknown()) {
+      throw new JSONMissingException(pointer);
+    }
+    return json;
   }
 
   private JSON traverse(JSON obj, List<String> pp) {
@@ -757,14 +871,13 @@ public final class JSON {
     if (getClass() != obj.getClass()) {
       return false;
     }
-    JSON other = (JSON) obj;
-    return type == other.type && Objects.equals(value, other.value);
+    return this.compareTo((JSON) obj) == 0;
   }
 
   public static enum ValueType {
-    UNKNOWN, STRING, NUMBER, NULL, BOOLEAN, ARRAY, OBJECT;
+    UNKNOWN, NULL, BOOLEAN, NUMBER, STRING, OBJECT, ARRAY;
 
-    static ValueType getTypeOf(Object v) {
+    public static ValueType getTypeOf(Object v) {
       if (v == null) {
         return NULL;
       }
@@ -789,25 +902,25 @@ public final class JSON {
   }
 
   private static final class NumberChars {
-    char[] chars;
-    int charsLength;
+    char[]  chars;
+    int     charsLength;
     boolean dotFound;
   }
 
   private static final class JsonWriter {
     private static final char[] QUOT_CHARS = { '\\', '"' };
-    private static final char[] BS_CHARS = { '\\', '\\' };
-    private static final char[] LF_CHARS = { '\\', 'n' };
-    private static final char[] CR_CHARS = { '\\', 'r' };
-    private static final char[] TAB_CHARS = { '\\', 't' };
+    private static final char[] BS_CHARS   = { '\\', '\\' };
+    private static final char[] LF_CHARS   = { '\\', 'n' };
+    private static final char[] CR_CHARS   = { '\\', 'r' };
+    private static final char[] TAB_CHARS  = { '\\', 't' };
 
     // In JavaScript, U+2028 and U+2029 characters count as line endings and must be
     // encoded.
     // http://stackoverflow.com/questions/2965293/javascript-parse-error-on-u2028-unicode-character
     private static final char[] UNICODE_2028_CHARS = { '\\', 'u', '2', '0', '2', '8' };
     private static final char[] UNICODE_2029_CHARS = { '\\', 'u', '2', '0', '2', '9' };
-    private static final char[] HEX_DIGITS = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd',
-        'e', 'f' };
+    private static final char[] HEX_DIGITS         = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c',
+        'd', 'e', 'f' };
 
     private final Writer writer;
 
@@ -921,9 +1034,9 @@ public final class JSON {
   }
 
   public static final class Builder {
-    final JSON json;
+    final JSON          json;
     final ObjectBuilder o;
-    final ArrayBuilder a;
+    final ArrayBuilder  a;
 
     Builder(JSON json) {
       this.json = json;
@@ -1002,6 +1115,10 @@ public final class JSON {
       return getO().put(key, val);
     }
 
+    public ObjectBuilder put(String key, JSON val) {
+      return getO().put(key, val);
+    }
+
     public ObjectBuilder put(String key, Number val) {
       return getO().put(key, val);
     }
@@ -1016,6 +1133,10 @@ public final class JSON {
 
     public ObjectBuilder delete(String key) {
       return getO().delete(key);
+    }
+
+    public ObjectBuilder move(String oldKey, String newKey) {
+      return getO().move(oldKey, newKey);
     }
 
     public Iterable<String> keys() {
@@ -1060,6 +1181,33 @@ public final class JSON {
       this(new ArrayList<>());
     }
 
+    public ArrayBuilder addAll(String[] all) {
+      if (all != null) {
+        for (var v : all) {
+          add(v);
+        }
+      }
+      return this;
+    }
+
+    public ArrayBuilder addAll(Number[] all) {
+      if (all != null) {
+        for (var v : all) {
+          add(v);
+        }
+      }
+      return this;
+    }
+
+    public ArrayBuilder addAll(Boolean[] all) {
+      if (all != null) {
+        for (var v : all) {
+          add(v);
+        }
+      }
+      return this;
+    }
+
     public ObjectBuilder addObject() {
       ObjectBuilder b = new ObjectBuilder();
       value.add(b.value);
@@ -1089,6 +1237,15 @@ public final class JSON {
         throw new JSONException("Value must be an Array");
       }
       value.add(val.value);
+      return this;
+    }
+
+    public ArrayBuilder add(JSON val) {
+      if (val != null) {
+        value.add(val.value);
+      } else {
+        addNull();
+      }
       return this;
     }
 
@@ -1161,7 +1318,7 @@ public final class JSON {
     }
 
     public ObjectBuilder putObject(String key, JSON val) {
-      if (val.type == ValueType.NULL) {
+      if (val == null || val.type == ValueType.NULL) {
         return putNull(key);
       }
       if (val.type != ValueType.OBJECT) {
@@ -1177,6 +1334,12 @@ public final class JSON {
       return b;
     }
 
+    public ObjectBuilder putArray(String key, Consumer<ArrayBuilder> c) {
+      ArrayBuilder b = new ArrayBuilder();
+      c.accept(b);
+      return this;
+    }
+
     public ObjectBuilder putArray(String key, JSON val) {
       if (val.type == ValueType.NULL) {
         return putNull(key);
@@ -1185,6 +1348,15 @@ public final class JSON {
         throw new JSONException("Value must be an Array");
       }
       value.put(key, val.value);
+      return this;
+    }
+
+    public ObjectBuilder put(String key, JSON val) {
+      if (val != null) {
+        value.put(key, val.value);
+      } else {
+        value.put(key, null);
+      }
       return this;
     }
 
@@ -1203,8 +1375,49 @@ public final class JSON {
       return this;
     }
 
+    public ObjectBuilder put(String key, UUID val) {
+      if (val == null) {
+        putNull(key);
+      } else {
+        put(key, val.toString());
+      }
+      return this;
+    }
+
+    public ObjectBuilder put(String key, Object o) {
+      if (o instanceof JSON) {
+        put(key, (JSON) o);
+      } else if (o instanceof UUID) {
+        value.put(key, o.toString());
+      } else {
+        value.put(key, o);
+      }
+      return this;
+    }
+
+    public ObjectBuilder put(Object... a) {
+      Object key = UNIQ;
+      for (var v : a) {
+        if (key != UNIQ) {
+          put(String.valueOf(key), v);
+          key = UNIQ;
+        } else {
+          key = v;
+        }
+      }
+      return this;
+    }
+
     public ObjectBuilder putNull(String key) {
       value.put(key, null);
+      return this;
+    }
+
+    public ObjectBuilder move(String oldKey, String newKey) {
+      if (value.containsKey(oldKey)) {
+        value.put(newKey, value.get(oldKey));
+        value.remove(oldKey);
+      }
       return this;
     }
 
@@ -1230,5 +1443,99 @@ public final class JSON {
       writeTo(sw, value);
       return sw.toString();
     }
+  }
+
+  private int compareRaw(Object v1, Object v2) {
+    ValueType t1 = ValueType.getTypeOf(v1);
+    ValueType t2 = ValueType.getTypeOf(v2);
+    if (t1 != t2) {
+      return t1.ordinal() - t2.ordinal();
+    }
+    switch (t1) {
+      case STRING:
+        return ((String) v1).compareTo((String) v2);
+      case OBJECT:
+        return compareRawObjects((Map<String, ?>) v1, (Map<String, ?>) v2);
+      case NUMBER:
+        return ((Comparable<Number>) v1).compareTo((Number) v2);
+      case BOOLEAN:
+        return ((Boolean) v1).compareTo((Boolean) v2);
+      case ARRAY: {
+        return compareRawLists((List<Object>) v1, (List<Object>) v2);
+      }
+      case NULL:
+      case UNKNOWN:
+        break;
+    }
+    return 0;
+  }
+
+  private int compareRawLists(List<Object> l1, List<Object> l2) {
+    for (int i = 0, l = Math.min(l1.size(), l2.size()); i < l; ++i) {
+      int res = compareRaw(l1.get(i), l2.get(i));
+      if (res != 0) {
+        return res;
+      }
+    }
+    if (l1.size() > l2.size()) {
+      return 1;
+    } else if (l2.size() < l2.size()) {
+      return -1;
+    } else {
+      return 0;
+    }
+  }
+
+  private int compareRawObjects(Map<String, ?> m1, Map<String, ?> m2) {
+    int cnt = m1.size();
+    int i = m2.size();
+    if (cnt > i) {
+      return 1;
+    } else if (cnt < i) {
+      return -1;
+    } else if (cnt == 0) {
+      return 0;
+    }
+    String[] k1 = m1.keySet().toArray(new String[0]);
+    String[] k2 = m2.keySet().toArray(new String[0]);
+    Arrays.sort(k1);
+    Arrays.sort(k2);
+    for (i = 0; i < cnt; ++i) {
+      int res = k1[i].compareTo(k2[i]);
+      if (res != 0) {
+        return res;
+      }
+      res = compareRaw(m1.get(k1[i]), m2.get(k2[i]));
+      if (res != 0) {
+        return res;
+      }
+    }
+    return 0;
+  }
+
+  @Override
+  public int compareTo(JSON o) {
+    if (o == null) {
+      return 1;
+    }
+    if (type != o.type) {
+      return type.ordinal() - o.type.ordinal();
+    }
+    switch (type) {
+      case OBJECT:
+        return compareRawObjects((Map<String, ?>) value, (Map<String, ?>) o.value);
+      case ARRAY:
+        return compareRawLists((List<Object>) value, (List<Object>) value);
+      case STRING:
+        return ((String) value).compareTo(o.cast());
+      case NUMBER:
+        return ((Comparable<Number>) value).compareTo(o.cast());
+      case BOOLEAN:
+        return ((Boolean) value).compareTo(o.cast());
+      case NULL:
+      case UNKNOWN:
+        break;
+    }
+    return 0;
   }
 }

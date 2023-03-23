@@ -33,10 +33,10 @@
 #endif
 
 #define EJDB2_GIT_REVISION  ""
-#define EJDB2_VERSION       "2.0.59"
+#define EJDB2_VERSION       "2.73"
 #define EJDB2_VERSION_MAJOR 2
-#define EJDB2_VERSION_MINOR 0
-#define EJDB2_VERSION_PATCH 59
+#define EJDB2_VERSION_MINOR 73
+#define EJDB2_VERSION_PATCH 0
 
 #include <stddef.h>
 #include <stdint.h>

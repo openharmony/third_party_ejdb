@@ -22,6 +22,7 @@ action("copy_iowow_header") {
     "$target_gen_dir/ejdb2/iowow/basedefs.h",
     "$target_gen_dir/ejdb2/iowow/iowow.h",
     "$target_gen_dir/ejdb2/iowow/iwarr.h",
+    "$target_gen_dir/ejdb2/iowow/iwbinn.h",
     "$target_gen_dir/ejdb2/iowow/iwbits.h",
     "$target_gen_dir/ejdb2/iowow/iwconv.h",
     "$target_gen_dir/ejdb2/iowow/iwdlsnr.h",
@@ -29,11 +30,14 @@ action("copy_iowow_header") {
     "$target_gen_dir/ejdb2/iowow/iwfile.h",
     "$target_gen_dir/ejdb2/iowow/iwfsmfile.h",
     "$target_gen_dir/ejdb2/iowow/iwhmap.h",
+    "$target_gen_dir/ejdb2/iowow/iwjson_internal.h",
+    "$target_gen_dir/ejdb2/iowow/iwjson.h",
     "$target_gen_dir/ejdb2/iowow/iwkv.h",
     "$target_gen_dir/ejdb2/iowow/iwlog.h",
     "$target_gen_dir/ejdb2/iowow/iwp.h",
     "$target_gen_dir/ejdb2/iowow/iwpool.h",
     "$target_gen_dir/ejdb2/iowow/iwrdb.h",
+    "$target_gen_dir/ejdb2/iowow/iwre.h",
     "$target_gen_dir/ejdb2/iowow/iwsha2.h",
     "$target_gen_dir/ejdb2/iowow/iwstree.h",
     "$target_gen_dir/ejdb2/iowow/iwstw.h",
@@ -42,6 +46,7 @@ action("copy_iowow_header") {
     "$target_gen_dir/ejdb2/iowow/iwuuid.h",
     "$target_gen_dir/ejdb2/iowow/iwxstr.h",
     "$target_gen_dir/ejdb2/iowow/murmur3.h",
+    "$target_gen_dir/ejdb2/iowow/utf8proc.h",
   ]
   args = [
     "--src-dir",
@@ -53,23 +58,23 @@ action("copy_iowow_header") {
 
 config("ejdb_public_config") {
   include_dirs = [
+    "$target_gen_dir",
+    "$target_gen_dir/ejdb2",
     "src",
     "src/jbi",
-    "src/jbl",
     "src/jql",
     "src/util",
-    "$target_gen_dir",
   ]
 }
 
 config("ejdb_config") {
   include_dirs = [
+    "$target_gen_dir",
+    "$target_gen_dir/ejdb2",
     "src",
     "src/jbi",
-    "src/jbl",
     "src/jql",
     "src/util",
-    "$target_gen_dir",
   ]
 
   cflags = [
@@ -78,6 +83,7 @@ config("ejdb_config") {
     "-Wall",
     "-Wextra",
     "-Wfatal-errors",
+    "-Wno-gnu-statement-expression",
     "-Wno-implicit-fallthrough",
     "-Wno-missing-braces",
     "-Wno-missing-field-initializers",
@@ -95,8 +101,6 @@ config("ejdb_config") {
   defines = [
     "IW_64",
     "IW_API_EXPORTS",
-
-    #"JB_HAVE_QSORT_R",
     "JB_PTHREADS",
     "_DEFAULT_SOURCE",
     "_FILE_OFFSET_BITS=64",
@@ -120,13 +124,8 @@ ohos_shared_library("ejdb") {
     "src/jbi/jbi_sorter_consumer.c",
     "src/jbi/jbi_uniq_scanner.c",
     "src/jbi/jbi_util.c",
-    "src/jbl/binn.c",
-    "src/jbl/jbl.c",
-    "src/jbl/jbl_json.c",
     "src/jql/jql.c",
     "src/jql/jqp.c",
-    "src/util/lwre.c",
-    "src/util/utf8proc.c",
   ]
 
   deps = [
@@ -153,13 +152,8 @@ ohos_static_library("ejdb_static_lib_for_tdd") {
     "src/jbi/jbi_sorter_consumer.c",
     "src/jbi/jbi_uniq_scanner.c",
     "src/jbi/jbi_util.c",
-    "src/jbl/binn.c",
-    "src/jbl/jbl.c",
-    "src/jbl/jbl_json.c",
     "src/jql/jql.c",
     "src/jql/jqp.c",
-    "src/util/lwre.c",
-    "src/util/utf8proc.c",
   ]
 
   deps = [

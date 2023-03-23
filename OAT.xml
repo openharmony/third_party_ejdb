@@ -64,6 +64,7 @@ Note:If the text contains special characters, please escape them according to th
             <filefilter name="defaultFilter" desc="Files not to check">
             </filefilter>
             <filefilter name="defaultPolicyFilter" desc="Filters for compatibility，license header policies">
+                <filteritem type="filepath" name="Changelog" desc="the header of the file is not license" />
                 <filteritem type="filepath" name="release.sh" desc="the header of the file is not license" />
                 <filteritem type="filepath" name="src/bindings/ejdb2_flutter/ios/ejdb2_flutter.podspec" desc="the header of the file is not license" />
             </filefilter>

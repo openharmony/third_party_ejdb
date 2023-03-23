@@ -5,15 +5,16 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif()
 
-set(MODULES util jbl jql jbi)
+set(MODULES util jql jbi)
 set(PROJECT_LLIBRARIES)
 set(PROJECT_INCLUDE_DIRS)
 set(ALL_SRC)
 set(ALL_HDRS)
 set(PUB_HDRS)
 set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
 list(APPEND PROJECT_INCLUDE_DIRS "${PROJECT_GENERATED_DIR}"
-     "${CMAKE_CURRENT_SOURCE_DIR}")
+     "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/include")
 
 if(APPLE)
   option(BUILD_FRAMEWORK "Build an OS X framework" OFF)
@@ -22,10 +23,25 @@ if(APPLE)
       CACHE STRING "Directory to install frameworks to.")
 endif()
 
+if(APPLE)
+  set(STRIP_CMD strip -x)
+else()
+  set(STRIP_CMD ${CMAKE_STRIP} -s)
+endif()
+
 include(CheckIncludeFile)
 include(CheckIncludeFiles)
 include(CheckLibraryExists)
 include(TestBigEndian)
+
+find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
+if(CMAKE_USE_WIN32_THREADS_INIT)
+  add_definitions(-DJB_WIN32_THREADS)
+elseif(CMAKE_USE_PTHREADS_INIT)
+  add_definitions(-DJB_PTHREADS)
+else()
+  mesage(FATAL_ERROR "Unable to find suitable threading library")
+endif(CMAKE_USE_WIN32_THREADS_INIT)
 
 include(AddIOWOW)
 
@@ -33,7 +49,7 @@ if(ENABLE_HTTP)
   if(WIN32)
     message(FATAL_ERROR "ENABLE_HTTP option cannot be used in Windows build")
   endif()
-  include(AddFacil)
+  include(AddIWNET)
   add_definitions(-DJB_HTTP)
   list(APPEND MODULES jbr)
 endif()
@@ -61,15 +77,6 @@ endif()
 if(BUILD_TESTS)
   add_definitions(-DIW_TESTS)
 endif()
-
-find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
-if(CMAKE_USE_WIN32_THREADS_INIT)
-  add_definitions(-DJB_WIN32_THREADS)
-elseif(CMAKE_USE_PTHREADS_INIT)
-  add_definitions(-DJB_PTHREADS)
-else()
-  mesage(FATAL_ERROR "Unable to find suitable threading library")
-endif(CMAKE_USE_WIN32_THREADS_INIT)
 
 if(ANDROID)
   find_library(LOG_LIB log)
@@ -100,15 +107,11 @@ else()
   add_definitions(-D_POSIX_THREAD_SAFE_FUNCTIONS)
 endif()
 
-foreach(HF IN ITEMS stdlib stddef stdint stdbool)
-  string(TOUPPER "${HF}" UHF)
-  check_include_file(${HF}.h "JB_HAVE_${UHF}")
-  if(NOT JB_HAVE_${UHF})
-    message(FATAL_ERROR "Include file '${HF}.h' not FOUND")
-  endif()
-endforeach()
-
-add_definitions(-D_XOPEN_SOURCE=600)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Needed by Linux in order to use nftw() but fail to build on FreeBSD due to
+  # __BSD_VISIBLE define state.
+  add_definitions(-D_XOPEN_SOURCE=700)
+endif()
 add_definitions(-D_DEFAULT_SOURCE)
 add_definitions(-D_LARGEFILE_SOURCE)
 add_definitions(-D_FILE_OFFSET_BITS=64)
@@ -127,20 +130,18 @@ foreach(MODULE IN LISTS MODULES)
   list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
 endforeach(MODULE)
 
-list(
-  APPEND
-  PUB_HDRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/ejdb2.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/jbl/jbl.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/jbr/jbr.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/jql/jql.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/util/lwre.h)
+list(APPEND PUB_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/ejdb2.h
+     ${CMAKE_CURRENT_SOURCE_DIR}/jbr/jbr.h
+     ${CMAKE_CURRENT_SOURCE_DIR}/jql/jql.h)
 
 set(CMAKE_C_FLAGS
-    "${CMAKE_C_FLAGS} -std=gnu11 -fsigned-char -pedantic -Wfatal-errors -Wall -Wextra \
+    "${CMAKE_C_FLAGS} -std=gnu11 -fsigned-char -Wfatal-errors -Wall -Wextra \
                   -Wno-sign-compare -Wno-unused-parameter -Wno-unknown-pragmas -Wno-unused-function \
-                  -Wno-missing-field-initializers -Wno-missing-braces \
-                  -Wno-shorten-64-to-32")
+                  -Wno-missing-field-initializers -Wno-missing-braces")
+
+if(APPLE)
+  set("${CMAKE_C_FLAGS} -Wno-shorten-64-to-32")
+endif()
 
 if(NOT WIN32)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-implicit-fallthrough -fPIC")
@@ -171,6 +172,11 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tmpl/ejdb2cfg.h
                ${PROJECT_GENERATED_DIR}/ejdb2cfg.h)
 file(GLOB PROJECT_GENERATED_HDRS ${PROJECT_GENERATED_DIR}/*.h)
 list(APPEND ALL_HDRS ${PROJECT_GENERATED_HDRS})
+
+set(PCLIBS "-liowow -lm")
+if(DEFINED IWNET_INCLUDE_DIR)
+  set(PCLIBS "-liwnet ${PCLIBS}")
+endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tmpl/libejdb2.pc.in
                ${PROJECT_GENERATED_DIR}/libejdb2.pc @ONLY)
@@ -254,9 +260,9 @@ else()
   add_library(ejdb2_s STATIC ${ALL_SRC})
 endif()
 
-target_link_libraries(ejdb2 ${PROJECT_LLIBRARIES})
+target_link_libraries(ejdb2 PUBLIC ${PROJECT_LLIBRARIES})
 if(BUILD_SHARED_LIBS)
-  target_link_libraries(ejdb2_s ${PROJECT_LLIBRARIES})
+  target_link_libraries(ejdb2_s PUBLIC ${PROJECT_LLIBRARIES})
 endif()
 
 if(BUILD_SHARED_LIBS)
@@ -273,8 +279,8 @@ if(BUILD_SHARED_LIBS)
               ${CMAKE_CURRENT_BINARY_DIR}/libejdb2.exp
         DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endif()
-
   endif()
+
   set_target_properties(
     ejdb2
     PROPERTIES VERSION ${PROJECT_VERSION}
@@ -286,23 +292,27 @@ if(BUILD_SHARED_LIBS)
     add_custom_command(
       TARGET ejdb2
       POST_BUILD
-      COMMAND strip -s $<TARGET_FILE:ejdb2>)
+      COMMAND ${STRIP_CMD} $<TARGET_FILE:ejdb2>)
   endif()
 
   set_target_properties(
-    ejdb2_s PROPERTIES VERSION ${PROJECT_VERSION} COMPILE_FLAGS "-DIW_NODLL"
-                       OUTPUT_NAME ejdb2-${PROJECT_VERSION_MAJOR})
+    ejdb2_s
+    PROPERTIES VERSION ${PROJECT_VERSION}
+               COMPILE_FLAGS "-DIW_STATIC"
+               OUTPUT_NAME ejdb2-${PROJECT_VERSION_MAJOR})
 else()
+
   set_target_properties(
     ejdb2
     PROPERTIES VERSION ${PROJECT_VERSION}
                PUBLIC_HEADER "${PUB_HDRS}"
-               COMPILE_FLAGS "-DIW_NODLL"
+               COMPILE_FLAGS "-DIW_STATIC"
                LINK_FLAGS_RELEASE "${LINK_FLAGS_RELEASE} -s"
                OUTPUT_NAME ejdb2-${PROJECT_VERSION_MAJOR})
 endif()
 
 if(DO_INSTALL_CORE)
+  include(InstallRequiredSystemLibraries)
   install(
     TARGETS ejdb2
     EXPORT ejdb2-exports
@@ -329,13 +339,28 @@ if(BUILD_SHARED_LIBS AND DO_INSTALL_CORE)
 endif()
 
 if(DO_INSTALL_CORE)
-  # Install iowow headers included into ejdb2
+  if(INSTALL_FLAT_SUBPROJECT_INCLUDES)
+    set(INCLUDES_DEST ${CMAKE_INSTALL_INCLUDEDIR})
+  else()
+    set(INCLUDES_DEST ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+  endif()
+
+  if(DEFINED IWNET_INCLUDE_DIR)
+    install(
+      DIRECTORY ${IWNET_INCLUDE_DIR}/iwnet
+      DESTINATION ${INCLUDES_DEST}
+      COMPONENT headers
+      FILES_MATCHING
+      PATTERN "*.h")
+  endif()
+
   install(
-    DIRECTORY ${IOWOW_INCLUDE_DIR}/${PROJECT_NAME}/iowow
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+    DIRECTORY ${IOWOW_INCLUDE_DIR}/iowow
+    DESTINATION ${INCLUDES_DEST}
     COMPONENT headers
     FILES_MATCHING
     PATTERN "*.h")
+
   install(FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/Changelog
           DESTINATION ${CMAKE_INSTALL_DOCDIR})
   install(
@@ -349,8 +374,6 @@ if(DO_INSTALL_CORE)
   endif(BUILD_SHARED_LIBS)
 
 endif()
-
-include(InstallRequiredSystemLibraries)
 
 set(${PROJECT_NAME}_PUB_HDRS
     ${PUB_HDRS}
