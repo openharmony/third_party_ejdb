@@ -14,12 +14,16 @@
         "subsystem": "thirdparty",
         "syscap": [],
         "features": [],
-        "adapted_system_type": [],
+        "adapted_system_type": [
+            "standard"
+        ],
         "rom": "",
         "ram": "",
         "deps": {
             "components": [],
-            "third_party": []
+            "third_party": [
+                "iowow"
+            ]
         },
         "build": {
             "sub_component": [
