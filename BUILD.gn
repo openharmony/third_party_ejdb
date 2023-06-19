@@ -135,6 +135,7 @@ ohos_shared_library("ejdb") {
     "//third_party/iowow:iowow",
   ]
   version_script = "libejdb.map"
+  innerapi_tags = [ "platformsdk" ]
   part_name = "ejdb"
   subsystem_name = "thirdparty"
 }
